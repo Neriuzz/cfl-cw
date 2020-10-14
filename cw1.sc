@@ -17,6 +17,7 @@ case class UPTO(r: Regexp, m: Int) extends Regexp
 case class FROM(r: Regexp, n: Int) extends Regexp
 case class BETWEEN(r: Regexp, n: Int, m: Int) extends Regexp
 case class NOT(r: Regexp) extends Regexp
+case class CFUN(f: Char => Boolean) extends Regexp
 
 // Function to check whether the regular expression can match on the empty string.
 def nullable(r: Regexp): Boolean =
@@ -49,7 +50,7 @@ def der(c: Char, r: Regexp): Regexp =
       else SEQ(der(c, r1), r2)
     case STAR(r)     => SEQ(der(c, r), STAR(r))
     case RANGE(cs)   => if (cs.contains(CHAR(c))) ONE else ZERO
-    case PLUS(r)     => SEQ(der(c, r), STAR(r))
+    case PLUS(r)     => ALT(der(c, r), SEQ(der(c, r), PLUS(r)))
     case OPTIONAL(r) => der(c, r)
     case NTIMES(r, n) =>
       if (n == 0) ZERO else SEQ(der(c, r), NTIMES(r, n - 1))
