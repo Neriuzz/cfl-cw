@@ -54,9 +54,13 @@ def der(c: Char, r: Regexp): Regexp =
     case SEQ(r1, r2) =>
       if (nullable(r1)) ALT(SEQ(der(c, r1), r2), der(c, r2))
       else SEQ(der(c, r1), r2)
-    case STAR(r)     => SEQ(der(c, r), STAR(r))
-    case RANGE(cs)   => if (cs.contains(c)) ONE else ZERO
-    case PLUS(r)     => ALT(der(c, r), SEQ(der(c, r), PLUS(r)))
+    case STAR(r)   => SEQ(der(c, r), STAR(r))
+    case RANGE(cs) => if (cs.contains(c)) ONE else ZERO
+    case PLUS(r) =>
+      SEQ(
+        der(c, r),
+        STAR(r)
+      ) //ALT(der(c, r), SEQ(der(c, r), PLUS(r))) <-- This also works but if I try running question 7 with this the program runs out of heap space
     case OPTIONAL(r) => der(c, r)
     case NTIMES(r, n) =>
       if (n == 0) ZERO else SEQ(der(c, r), NTIMES(r, n - 1))
@@ -129,7 +133,7 @@ val strings = List(
 )
 
 @main
-def test() = {
+def q3and4() = {
   // Test regexps against strings
   for (i <- 0 to regexps.size - 1) {
     for (j <- 0 to strings.size - 1) {
@@ -140,25 +144,71 @@ def test() = {
 }
 
 @main
-def email() = {
-  // Regexp to match emails from Q5
+def q5() = {
   val emailRegexp =
     SEQ(
       SEQ(
         SEQ(
           SEQ(
             PLUS(
-              RANGE("abcdefghijklmnopqrstuvxyz0123456789_.-".toSet)
+              RANGE("abcdefghijklmnopqrstuvwxyz0123456789_.-".toSet)
             ),
             CHAR('@')
           ),
-          PLUS(RANGE("abcdefghijklmnopqrstuvxyz0123456789_.-".toSet))
+          PLUS(RANGE("abcdefghijklmnopqrstuvwxyz0123456789_.-".toSet))
         ),
         CHAR('.')
       ),
-      BETWEEN(RANGE("abcdefghijklmnopqrstuvxyz".toSet), 2, 6)
+      BETWEEN(RANGE("abcdefghijklmnopqrstuvwxyz".toSet), 2, 6)
     )
   val email = "neriusilmonas@gmail.com"
   println(f"Result: ${matcher(emailRegexp, email)}")
   println(f"Derivative: ${ders(email.toList, emailRegexp)}")
+}
+
+@main
+def q6() = {
+  val regexp =
+    SEQ(
+      SEQ(
+        SEQ(
+          SEQ(
+            CHAR('/'),
+            CHAR('*')
+          ),
+          NOT(
+            SEQ(
+              SEQ(SEQ(STAR(CFUNALL()), CHAR('*')), CHAR('/')),
+              STAR(CFUNALL())
+            )
+          )
+        ),
+        CHAR('*')
+      ),
+      CHAR('/')
+    )
+
+  val strings = List("/**/", "/*foobar*/", "/*test*/test*/", "/*test/*test*/")
+
+  for (i <- 0 to strings.size - 1) {
+    println(f"Matching against: ${strings(i)}")
+    println(f"Result: ${matcher(regexp, strings(i))}")
+  }
+}
+
+@main
+def q7() = {
+  var r1 = PLUS(PLUS(SEQ(SEQ(CHAR('a'), CHAR('a')), CHAR('a'))))
+  var r2 = PLUS(PLUS(SEQ(BETWEEN(CHAR('a'), 19, 19), OPTIONAL(CHAR('a')))))
+
+  var strings = List(
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  )
+
+  for (i <- 0 to strings.size - 1) {
+    println(f"r1 result for string ${i}: ${matcher(r1, strings(i))}")
+    println(f"r2 result for string ${i}: ${matcher(r2, strings(i))}")
+  }
 }
