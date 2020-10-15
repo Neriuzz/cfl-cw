@@ -105,35 +105,38 @@ def ders(s: List[Char], r: Regexp): Regexp =
 def matcher(r: Regexp, s: String): Boolean =
   nullable(ders(s.toList, r))
 
-// List of regexps to test
-val regexps = List(
-  OPTIONAL(CHAR('a')),
-  NOT(CHAR('a')),
-  NTIMES(CHAR('a'), 3),
-  NTIMES(OPTIONAL(CHAR('a')), 3),
-  UPTO(CHAR('a'), 3),
-  UPTO(OPTIONAL(CHAR('a')), 3),
-  BETWEEN(CHAR('a'), 3, 5),
-  OPTIONAL(BETWEEN(CHAR('a'), 3, 5)),
-  PLUS(CHAR('a')),
-  RANGE(Set('a', 'b', 'c')),
-  CFUNCHAR('a'),
-  CFUNRANGE(Set('a', 'b', 'c')),
-  CFUNALL()
-)
-
-// List of strings to test against
-val strings = List(
-  "",
-  "a",
-  "aa",
-  "aaa",
-  "aaaaa",
-  "aaaaaa"
-)
-
+// Testing for questions 3 and 4
 @main
 def q3and4() = {
+  // List of regexps to test
+  val regexps = List(
+    NTIMES(CHAR('a'), 0),
+    FROM(CHAR('a'), 3),
+    OPTIONAL(CHAR('a')),
+    NOT(CHAR('a')),
+    NTIMES(CHAR('a'), 3),
+    NTIMES(OPTIONAL(CHAR('a')), 3),
+    UPTO(CHAR('a'), 3),
+    UPTO(OPTIONAL(CHAR('a')), 3),
+    BETWEEN(CHAR('a'), 3, 5),
+    OPTIONAL(BETWEEN(CHAR('a'), 3, 5)),
+    PLUS(CHAR('a')),
+    RANGE(Set('a', 'b', 'c')),
+    CFUNCHAR('a'),
+    CFUNRANGE(Set('a', 'b', 'c')),
+    CFUNALL()
+  )
+
+  // List of strings to test against
+  val strings = List(
+    "",
+    "a",
+    "aa",
+    "aaa",
+    "aaaaa",
+    "aaaaaa"
+  )
+
   // Test regexps against strings
   for (i <- 0 to regexps.size - 1) {
     for (j <- 0 to strings.size - 1) {
@@ -143,6 +146,7 @@ def q3and4() = {
   }
 }
 
+// Testing for question 5
 @main
 def q5() = {
   val emailRegexp =
@@ -155,17 +159,18 @@ def q5() = {
             ),
             CHAR('@')
           ),
-          PLUS(RANGE("abcdefghijklmnopqrstuvwxyz0123456789_.-".toSet))
+          PLUS(RANGE("abcdefghijklmnopqrstuvwxyz0123456789.-".toSet))
         ),
         CHAR('.')
       ),
-      BETWEEN(RANGE("abcdefghijklmnopqrstuvwxyz".toSet), 2, 6)
+      BETWEEN(RANGE("abcdefghijklmnopqrstuvwxyz.".toSet), 2, 6)
     )
-  val email = "neriusilmonas@gmail.com"
+  val email = "k1889934@kcl.ac.uk"
   println(f"Result: ${matcher(emailRegexp, email)}")
   println(f"Derivative: ${ders(email.toList, emailRegexp)}")
 }
 
+// Testing for question 6
 @main
 def q6() = {
   val regexp =
@@ -196,6 +201,7 @@ def q6() = {
   }
 }
 
+// Testing for question 7
 @main
 def q7() = {
   var r1 = PLUS(PLUS(SEQ(SEQ(CHAR('a'), CHAR('a')), CHAR('a'))))

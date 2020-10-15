@@ -1,1 +1,2 @@
-ALT(SEQ(SEQ(STAR([a-z0-9_.-]),CHAR(.)),BETWEEN([a-z]),2,6),UPTO([a-z],3))
+ALT(ALT(SEQ(SEQ(STAR([a-z0-9.-]),CHAR(.)),BETWEEN([a-z.],2,6)),BETWEEN([a-z.],0,4)),UPTO([a-z.],1))
+([a-z0-9.-]* . \. . [a-z.]{2,6}) + [a-z.]{0,4} + [a-z.]?
