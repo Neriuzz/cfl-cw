@@ -1,0 +1,35 @@
+ALT(
+    SEQ(
+        SEQ(
+            ALT(
+                ONE,
+                PLUS(CFUN(ammonite.$file.cw1$$$Lambda$1423/0x00000008407c0040@51508029))
+            ),
+            CHAR(.)
+        ),
+        BETWEEN(CFUN(ammonite.$file.cw1$$$Lambda$1423/0x00000008407c0040@5f20b6fe),2,6)
+    ),
+    UPTO(CFUN(ammonite.$file.cw1$$$Lambda$1423/0x00000008407c0040@5f20b6fe),3)
+)
+
+ALT(
+    SEQ(
+        SEQ(
+            ALT(
+                ONE,
+                PLUS(
+                    RANGE(
+                        HashSet(e, 8, t, a, 5, m, i, -, v, p, 2, 3, k, s, x, 4, n, ., 9, j, y, u, f, 6, 1, q, b, g, l, 0, _, c, h, 7, r, o, z, d)
+                    )
+                )
+            ),
+            CHAR(.)
+        ),
+        BETWEEN(
+            RANGE(HashSet(e, n, t, a, m, i, v, p, r, k, s, x, j, y, u, f, q, b, g, l, c, h, o, z, d)),2,6
+        )
+    ),
+    UPTO(
+        RANGE(HashSet(e, n, t, a, m, i, v, p, r, k, s, x, j, y, u, f, q, b, g, l, c, h, o, z, d)),3
+    )
+)
