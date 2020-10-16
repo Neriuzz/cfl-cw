@@ -1,14 +1,14 @@
-# Compilers & Formal Languages CW1
+# Compilers & Formal Languages CW1
 
-###### By Nerius Ilmonas (K1889934)
+###### By Nerius Ilmonas (K1889934)
 
 ---
 
-#### Question 1  
+#### Question 1
 
 My email is k1889934@kcl.ac.uk and I will be mainly studying from home.
 
-#### Question 2
+#### Question 2
 
 - Python
   
@@ -21,7 +21,7 @@ My email is k1889934@kcl.ac.uk and I will be mainly studying from home.
 - C
   
 
-#### Question 3
+#### Question 3
 
 Nullable definitions are as follows:
 
@@ -69,7 +69,7 @@ $der \hspace{.1cm}c(CFUN(f))$ was defined as ONE if the function $f(c)$ returns 
 
 #### Question 5
 
-Simplified derivative: $([a-z0-9.-]*.(.).[a-z.]\{2,6\}) + [a-z.]\{0,4\} + [a-z.]?$
+Simplified derivative: $\textrm{([a-z0-9.-]}^* \hspace{.1cm} . \hspace{.1cm} (.) \hspace{.1cm} . \hspace{.1cm} \textrm{[a-z.]}\{2,6\}) \hspace{.1cm} + \hspace{.1cm} \textrm{[a-z.]}\{0,4\} \hspace{.1cm} + \hspace{.1cm} \textrm{[a-z.]}^?$
 
 where $(.)$ is the literal character "."
 
@@ -78,9 +78,11 @@ where $(.)$ is the literal character "."
 | String | Matched? |
 | --- | --- |
 | /\*\*/ | Yes |
-| /*foobar\*/ | Yes |
+| /\*foobar\*/ | Yes |
 | /\*test\*/test\*/ | No  |
 | /\*test/\*test\*/ | Yes |
+
+####
 
 #### Question 7
 
