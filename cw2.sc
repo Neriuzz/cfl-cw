@@ -17,6 +17,16 @@ case class OPTIONAL(r: Regexp) extends Regexp
 case class NTIMES(r: Regexp, n: Int) extends Regexp
 case class REC(s: String, r: Regexp) extends Regexp
 
+// Value definitions
+abstract class Val
+case object Empty extends Val
+case class Chr(c: Char) extends Val
+case class Sequ(v1: Val, v2: Val) extends Val
+case class Left(v: Val) extends Val
+case class Right(v: Val) extends Val
+case class Stars(vs: List[Val]) extends Val
+case class Rec(x: String, v: Val) extends Val
+
 // Function to check whether the regular expression can match on the empty string.
 def nullable(r: Regexp): Boolean =
   r match {
@@ -80,6 +90,31 @@ implicit def stringOps(s: String) =
     def $(r: Regexp) = REC(s, r)
   }
 
+// Extracts a string from a value
+def flatten(v: Val): String =
+  v match {
+    case Empty        => ""
+    case Chr(c)       => c.toString
+    case Left(v)      => flatten(v)
+    case Right(v)     => flatten(v)
+    case Sequ(v1, v2) => flatten(v1) ++ flatten(v2)
+    case Stars(vs)    => vs.map(flatten).mkString
+    case Rec(_, v)    => flatten(v)
+  }
+
+// Extracts an environment from a value;
+// Used for tokenising a string
+def env(v: Val): List[(String, String)] =
+  v match {
+    case Empty        => Nil
+    case Chr(c)       => Nil
+    case Left(v)      => env(v)
+    case Right(v)     => env(v)
+    case Sequ(v1, v2) => env(v1) ::: env(v2)
+    case Stars(vs)    => vs.flatMap(env)
+    case Rec(x, v)    => (x, flatten(v)) :: env(v)
+  }
+
 // Question 1
 
 // Regular expressions for syntatic entities of the WHILE language
@@ -88,16 +123,37 @@ val KEYWORD: Regexp =
 val OPERATOR: Regexp =
   "+" | "-" | "*" | "%" | "/" | "==" | "!=" | ">" | "<" | "<=" | ">=" | ":=" | "&&" | "||"
 val LETTER: Regexp =
-  RANGE("ABCDEFGHIJKLMNOPQRSTUVWXYZ".toSet) | RANGE(
-    "abcdefghijklmnopqrstuvwxyz".toSet
-  )
+  RANGE("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toSet)
 val SYMBOL: Regexp = LETTER | RANGE("._><=;,:\\".toSet)
 val PARENTHESIS: Regexp = RANGE("(){}".toSet)
 val SEMICOLON: Regexp = ";"
-val WHITESPACE: Regexp = " " | "\n" | "\t"
+val WHITESPACE: Regexp = PLUS(" " | "\n" | "\t")
 val DIGIT: Regexp = RANGE("0123456789".toSet)
 val NONZERODIGIT: Regexp = RANGE("123456789".toSet)
-val STRING: Regexp = "\"" ~ PLUS(SYMBOL | WHITESPACE | DIGIT) ~ "\""
+val STRING: Regexp = "\"" ~ (SYMBOL | WHITESPACE | DIGIT).% ~ "\""
 val IDENTIFIER: Regexp = LETTER ~ PLUS("_" | LETTER | DIGIT)
 val NUMBER: Regexp = DIGIT ~ NONZERODIGIT.%
 val COMMENT: Regexp = "//" ~ (SYMBOL | " " | DIGIT).% ~ "\n"
+
+// Question 2
+def mkeps(r: Regexp): Val =
+  r match {
+    case ONE => Empty
+    case ALT(r1, r2) =>
+      if (nullable(r1)) Left(mkeps(r1)) else Right(mkeps(r2))
+    case SEQ(r1, r2) => Sequ(mkeps(r1), mkeps(r2))
+    case STAR(r)     => Stars(Nil)
+    case REC(x, r)   => Rec(x, mkeps(r))
+  }
+
+def inj(r: Regexp, c: Char, v: Val): Val =
+  (r, v) match {
+    case (STAR(r), Sequ(v1, Stars(vs)))    => Stars(inj(r, c, v1) :: vs)
+    case (SEQ(r1, r2), Sequ(v1, v2))       => Sequ(inj(r1, c, v1), v2)
+    case (SEQ(r1, r2), Left(Sequ(v1, v2))) => Sequ(inj(r1, c, v1), v2)
+    case (SEQ(r1, r2), Right(v2))          => Sequ(mkeps(r1), inj(r2, c, v2))
+    case (ALT(r1, r2), Left(v1))           => Left(inj(r1, c, v1))
+    case (ALT(r1, r2), Right(v2))          => Right(inj(r2, c, v2))
+    case (CHAR(d), Empty)                  => Chr(c)
+    case (REC(x, r1), _)                   => Rec(x, inj(r1, c, v))
+  }
