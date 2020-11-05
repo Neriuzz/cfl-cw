@@ -102,7 +102,7 @@ def flatten(v: Val): String =
     case Rec(_, v)    => flatten(v)
   }
 
-// Extracts an environment from a value;
+// Extracts an environment from a value
 // Used for tokenising a string
 def env(v: Val): List[(String, String)] =
   v match {
@@ -135,17 +135,24 @@ val IDENTIFIER: Regexp = LETTER ~ PLUS("_" | LETTER | DIGIT)
 val NUMBER: Regexp = DIGIT ~ NONZERODIGIT.%
 val COMMENT: Regexp = "//" ~ (SYMBOL | " " | DIGIT).% ~ "\n"
 
-// Question 2
+// Question 2\
+
+// This function tells us "how" a regular expression has matched the empty string
 def mkeps(r: Regexp): Val =
   r match {
     case ONE => Empty
     case ALT(r1, r2) =>
       if (nullable(r1)) Left(mkeps(r1)) else Right(mkeps(r2))
-    case SEQ(r1, r2) => Sequ(mkeps(r1), mkeps(r2))
-    case STAR(r)     => Stars(Nil)
-    case REC(x, r)   => Rec(x, mkeps(r))
+    case SEQ(r1, r2)  => Sequ(mkeps(r1), mkeps(r2))
+    case STAR(r)      => Stars(Nil)
+    case REC(x, r)    => Rec(x, mkeps(r))
+    case PLUS(r)      => mkeps(r)
+    case OPTIONAL(r)  => Empty
+    case NTIMES(r, n) => if (n == 0) Empty else mkeps(r)
   }
 
+// This function calculates "how" the derivative of a regular
+// expression has matched a string
 def inj(r: Regexp, c: Char, v: Val): Val =
   (r, v) match {
     case (STAR(r), Sequ(v1, Stars(vs)))    => Stars(inj(r, c, v1) :: vs)
@@ -156,4 +163,7 @@ def inj(r: Regexp, c: Char, v: Val): Val =
     case (ALT(r1, r2), Right(v2))          => Right(inj(r2, c, v2))
     case (CHAR(d), Empty)                  => Chr(c)
     case (REC(x, r1), _)                   => Rec(x, inj(r1, c, v))
+    case PLUS(r)                           => 
+    case OPTIONAL                          =>
+    case NTIMES                            =>
   }
