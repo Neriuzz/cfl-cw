@@ -163,7 +163,8 @@ def inj(r: Regexp, c: Char, v: Val): Val =
     case (ALT(r1, r2), Right(v2))          => Right(inj(r2, c, v2))
     case (CHAR(d), Empty)                  => Chr(c)
     case (REC(x, r1), _)                   => Rec(x, inj(r1, c, v))
-    case PLUS(r)                           => 
-    case OPTIONAL                          =>
-    case NTIMES                            =>
+    case (RANGE(cs), Empty)                => Chr(c)
+    case (PLUS(r))                           => 
+    case (OPTIONAL)                          =>
+    case (NTIMES)                            =>
   }
