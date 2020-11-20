@@ -299,6 +299,39 @@ implicit def ParserOps[I: IsSeq, T](p: Parser[I, T]) =
     def map[S](f: => T => S) = new MapParser[I, T, S](p, f)
   }
 
+// Token Parsers
+case class TokenParser(s: String) extends Parser[Tokens, String] {
+  def parse(in: Tokens) = {
+    if (in.nonEmpty && in.head._2 == s) Set((s, in.tail)) else Set()
+  }
+}
+
+case object IdentifierParser extends Parser[Tokens, String] {
+  def parse(in: Tokens) = {
+    if (in.nonEmpty && in.head._1 == "identifier") Set((in.head._2, in.tail))
+    else Set()
+  }
+}
+
+case object NumberParser extends Parser[Tokens, Int] {
+  def parse(in: Tokens) = {
+    if (in.nonEmpty && in.head._1 == "number") Set((in.head._2.toInt, in.tail))
+    else Set()
+  }
+}
+
+case object StringParser extends Parser[Tokens, String] {
+  def parse(in: Tokens) = {
+    if (in.nonEmpty && in.head._1 == "string") Set((in.head._2, in.tail))
+    else Set()
+  }
+}
+
+implicit def parser_interpolation(sc: StringContext) =
+  new {
+    def p(args: Any*) = TokenParser(sc.s(args: _*))
+  }
+
 // AST For the WHILE language
 abstract class Statement
 abstract class ArithmeticExpression
@@ -310,8 +343,9 @@ case object Skip extends Statement
 case class If(cond: BooleanExpression, bl1: Block, bl2: Block) extends Statement
 case class While(cond: BooleanExpression, bl: Block) extends Statement
 case class Assign(s: String, a: ArithmeticExpression) extends Statement
-case class Write(s: String) extends Statement
 case class Read(s: String) extends Statement
+case class WriteVar(s: String) extends Statement
+case class WriteStr(s: String) extends Statement
 
 case class Var(s: String) extends ArithmeticExpression
 case class Num(i: Int) extends ArithmeticExpression
@@ -328,7 +362,188 @@ case class BooleanOperation(
     a1: ArithmeticExpression,
     a2: ArithmeticExpression
 ) extends BooleanExpression
-case class And(b1: BooleanExpression, b2: BooleanExpression)
-    extends BooleanExpression
-case class Or(b1: BooleanExpression, b2: BooleanExpression)
-    extends BooleanExpression
+case class LogicalOperation(
+    op: String,
+    b1: BooleanExpression,
+    b2: BooleanExpression
+) extends BooleanExpression
+
+// Arithmetic Expressions
+lazy val ArithmeticExpression: Parser[Tokens, ArithmeticExpression] =
+  (Term ~ p"+" ~ ArithmeticExpression)
+    .map[ArithmeticExpression] {
+      case x ~ _ ~ z => ArithmeticOperation("+", x, z)
+    } ||
+    (Term ~ p"-" ~ ArithmeticExpression)
+      .map[ArithmeticExpression] {
+        case x ~ _ ~ z => ArithmeticOperation("-", x, z)
+      } ||
+    Term
+lazy val Term: Parser[Tokens, ArithmeticExpression] =
+  (Factor ~ p"*" ~ Term).map[ArithmeticExpression] {
+    case x ~ _ ~ z => ArithmeticOperation("*", x, z)
+  } ||
+    (Factor ~ p"/" ~ Term).map[ArithmeticExpression] {
+      case x ~ _ ~ z => ArithmeticOperation("/", x, z)
+    } ||
+    (Factor ~ p"%" ~ Term).map[ArithmeticExpression] {
+      case x ~ _ ~ z => ArithmeticOperation("%", x, z)
+    } ||
+    Factor
+lazy val Factor: Parser[Tokens, ArithmeticExpression] =
+  (p"(" ~ ArithmeticExpression ~ p")")
+    .map[ArithmeticExpression] { case _ ~ y ~ _ => y } ||
+    IdentifierParser.map(Var) ||
+    NumberParser.map(Num)
+
+// Boolean Expressions
+lazy val BooleanExpression: Parser[Tokens, BooleanExpression] =
+  (ArithmeticExpression ~ p"==" ~ ArithmeticExpression).map[BooleanExpression] {
+    case x ~ _ ~ z => BooleanOperation("==", x, z)
+  } ||
+    (ArithmeticExpression ~ p"!=" ~ ArithmeticExpression)
+      .map[BooleanExpression] {
+        case x ~ _ ~ z => BooleanOperation("!=", x, z)
+      } ||
+    (ArithmeticExpression ~ p"<" ~ ArithmeticExpression)
+      .map[BooleanExpression] {
+        case x ~ _ ~ z => BooleanOperation("<", x, z)
+      } ||
+    (ArithmeticExpression ~ p">" ~ ArithmeticExpression)
+      .map[BooleanExpression] {
+        case x ~ _ ~ z => BooleanOperation(">", x, z)
+      } ||
+    (p"(" ~ BooleanExpression ~ p")" ~ p"&&" ~ BooleanExpression)
+      .map[BooleanExpression] {
+        case _ ~ y ~ _ ~ _ ~ v => LogicalOperation("and", y, v)
+      } ||
+    (p"(" ~ BooleanExpression ~ p")" ~ p"||" ~ BooleanExpression)
+      .map[BooleanExpression] {
+        case _ ~ y ~ _ ~ _ ~ v => LogicalOperation("or", y, v)
+      } ||
+    (p"true".map[BooleanExpression] { _ => True }) ||
+    (p"false".map[BooleanExpression] { _ => False }) ||
+    (p"(" ~ BooleanExpression ~ p")").map[BooleanExpression] {
+      case _ ~ x ~ _ => x
+    }
+
+// A single statement
+lazy val Statement: Parser[Tokens, Statement] =
+  ((p"skip".map[Statement] { _ => Skip }) ||
+    (IdentifierParser ~ p":=" ~ ArithmeticExpression).map[Statement] {
+      case x ~ _ ~ z => Assign(x, z)
+    } ||
+    (p"read" ~ IdentifierParser).map[Statement] { case _ ~ y => Read(y) } ||
+    (p"write" ~ IdentifierParser).map[Statement] {
+      case _ ~ y => WriteVar(y)
+    } ||
+    (p"write" ~ StringParser).map[Statement] { case _ ~ y => WriteStr(y) } ||
+    (p"if" ~ BooleanExpression ~ p"then" ~ Block ~ p"else" ~ Block)
+      .map[Statement] { case _ ~ y ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
+    (p"while" ~ BooleanExpression ~ p"do" ~ Block).map[Statement] {
+      case _ ~ y ~ _ ~ w => While(y, w)
+    })
+
+// Statements
+lazy val Statements: Parser[Tokens, Block] =
+  (Statement ~ p";" ~ Statements).map[Block] {
+    case x ~ _ ~ z => x :: z
+  } ||
+    (Statement.map[Block] { s => List(s) })
+
+// Blocks
+lazy val Block: Parser[Tokens, Block] =
+  ((p"{" ~ Statements ~ p"}").map {
+    case _ ~ y ~ _ => y
+  } ||
+    (Statement.map(s => List(s))))
+
+@main
+def q2test() = {
+  println(
+    Statements.parse_all(
+      filter_tokens(
+        lexing_simp(LANGUAGE, "if (a < b) then skip else a := a * b + 1")
+      )
+    )
+  )
+}
+
+// Question 3
+
+// An interpreter for the WHILE language
+type Env = Map[String, Int]
+
+// Function to evaluate arithmetic expressions
+def eval_aexp(a: ArithmeticExpression, env: Env): Int =
+  a match {
+    case Num(i) => i
+    case Var(s) => env(s)
+    case ArithmeticOperation("+", a1, a2) =>
+      eval_aexp(a1, env) + eval_aexp(a2, env)
+    case ArithmeticOperation("-", a1, a2) =>
+      eval_aexp(a1, env) - eval_aexp(a2, env)
+    case ArithmeticOperation("*", a1, a2) =>
+      eval_aexp(a1, env) * eval_aexp(a2, env)
+    case ArithmeticOperation("/", a1, a2) =>
+      eval_aexp(a1, env) / eval_aexp(a2, env)
+    case ArithmeticOperation("%", a1, a2) =>
+      eval_aexp(a1, env) % eval_aexp(a2, env)
+  }
+
+// Function to evaluate boolean & logical expressions
+def eval_bexp(b: BooleanExpression, env: Env): Boolean =
+  b match {
+    case True  => true
+    case False => false
+    case BooleanOperation("==", a1, a2) =>
+      eval_aexp(a1, env) == eval_aexp(a2, env)
+    case BooleanOperation("!=", a1, a2) =>
+      eval_aexp(a1, env) != eval_aexp(a2, env)
+    case BooleanOperation(">", a1, a2) =>
+      eval_aexp(a1, env) > eval_aexp(a2, env)
+    case BooleanOperation("<", a1, a2) =>
+      eval_aexp(a1, env) < eval_aexp(a2, env)
+    case BooleanOperation(">=", a1, a2) =>
+      eval_aexp(a1, env) >= eval_aexp(a2, env)
+    case BooleanOperation("<=", a1, a2) =>
+      eval_aexp(a1, env) <= eval_aexp(a2, env)
+    case LogicalOperation("&&", b1, b2) =>
+      eval_bexp(b1, env) && eval_bexp(b2, env)
+    case LogicalOperation("||", b1, b2) =>
+      eval_bexp(b1, env) || eval_bexp(b2, env)
+  }
+
+// Function to evaluate a single statement
+def eval_stmt(s: Statement, env: Env): Env =
+  s match {
+    case Skip         => env
+    case Assign(x, a) => env + (x -> eval_aexp(a, env))
+    case If(b, bl1, bl2) =>
+      if (eval_bexp(b, env)) eval_bl(bl1, env) else eval_bl(bl2, env)
+    case While(b, bl) =>
+      if (eval_bexp(b, env)) eval_stmt(While(b, bl), eval_bl(bl, env)) else env
+    case Read(s)     => env + (s -> scala.io.StdIn.readInt())
+    case WriteVar(s) => { println(env(s)); env }
+    case WriteStr(s) => { println(s); env }
+  }
+
+// Function to evaluate a block
+def eval_bl(bl: Block, env: Env): Env =
+  bl match {
+    case Nil     => env
+    case s :: bl => eval_bl(bl, eval_stmt(s, env))
+  }
+
+// General eval function
+def eval(bl: Block): Env = eval_bl(bl, Map())
+
+// Function used to time other functions
+def time[T](func: => T): T = {
+  val t0 = System.nanoTime()
+  val result = func
+  val t1 = System.nanoTime()
+  val dt = (t1 - t0) / 10e9 // seconds
+  println(f"Elapsed time: $dt%2.2f s")
+  result
+}
