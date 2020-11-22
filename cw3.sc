@@ -433,13 +433,26 @@ lazy val Statement: Parser[Tokens, Statement] =
     (IdentifierParser ~ p":=" ~ ArithmeticExpression).map[Statement] {
       case x ~ _ ~ z => Assign(x, z)
     } ||
+    (p"read" ~ p"(" ~ IdentifierParser ~ p")").map[Statement] {
+      case _ ~ _ ~ z ~ _ => Read(z)
+    } ||
     (p"read" ~ IdentifierParser).map[Statement] { case _ ~ y => Read(y) } ||
+    (p"write" ~ p"(" ~ IdentifierParser ~ p")").map[Statement] {
+      case _ ~ _ ~ z ~ _ => WriteVar(z)
+    } ||
+    (p"write" ~ p"(" ~ StringParser ~ p")").map[Statement] {
+      case _ ~ _ ~ z ~ _ => WriteStr(z)
+    } ||
     (p"write" ~ IdentifierParser).map[Statement] {
       case _ ~ y => WriteVar(y)
     } ||
     (p"write" ~ StringParser).map[Statement] { case _ ~ y => WriteStr(y) } ||
+    (p"if" ~ p"(" ~ BooleanExpression ~ p")" ~ p"then" ~ Block ~ p"else" ~ Block)
+      .map[Statement] { case _ ~ _ ~ y ~ _ ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
     (p"if" ~ BooleanExpression ~ p"then" ~ Block ~ p"else" ~ Block)
       .map[Statement] { case _ ~ y ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
+    (p"while" ~ p"(" ~ BooleanExpression ~ p")" ~ p"do" ~ Block)
+      .map[Statement] { case _ ~ _ ~ y ~ _ ~ _ ~ w => While(y, w) } ||
     (p"while" ~ BooleanExpression ~ p"do" ~ Block).map[Statement] {
       case _ ~ y ~ _ ~ w => While(y, w)
     })
@@ -508,9 +521,9 @@ def eval_bexp(b: BooleanExpression, env: Env): Boolean =
       eval_aexp(a1, env) >= eval_aexp(a2, env)
     case BooleanOperation("<=", a1, a2) =>
       eval_aexp(a1, env) <= eval_aexp(a2, env)
-    case LogicalOperation("&&", b1, b2) =>
+    case LogicalOperation("and", b1, b2) =>
       eval_bexp(b1, env) && eval_bexp(b2, env)
-    case LogicalOperation("||", b1, b2) =>
+    case LogicalOperation("or", b1, b2) =>
       eval_bexp(b1, env) || eval_bexp(b2, env)
   }
 
@@ -524,8 +537,11 @@ def eval_stmt(s: Statement, env: Env): Env =
     case While(b, bl) =>
       if (eval_bexp(b, env)) eval_stmt(While(b, bl), eval_bl(bl, env)) else env
     case Read(s)     => env + (s -> scala.io.StdIn.readInt())
-    case WriteVar(s) => { println(env(s)); env }
-    case WriteStr(s) => { println(s); env }
+    case WriteVar(s) => { print(env(s)); env }
+    case WriteStr(s) => {
+      print(StringContext treatEscapes s.replaceAll("\"", ""));
+      env // Hack to unesacpe string literals
+    }
   }
 
 // Function to evaluate a block
@@ -538,12 +554,104 @@ def eval_bl(bl: Block, env: Env): Env =
 // General eval function
 def eval(bl: Block): Env = eval_bl(bl, Map())
 
-// Function used to time other functions
-def time[T](func: => T): T = {
-  val t0 = System.nanoTime()
-  val result = func
-  val t1 = System.nanoTime()
-  val dt = (t1 - t0) / 10e9 // seconds
-  println(f"Elapsed time: $dt%2.2f s")
-  result
+@main
+def fib() = {
+  val fib =
+    """write "Fib";
+  read n;
+  minus1 := 0;
+  minus2 := 1;
+  while n > 0 do {
+    temp := minus2;
+    minus2 := minus1 + minus2;
+    minus1 := temp;
+    n := n - 1
+  };
+  write "Result";
+  write minus2"""
+  println(
+    eval(Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, fib))).head)
+  )
+}
+
+@main
+def loops() = {
+  val loops =
+    """start := 100;
+  x := start;
+  y := start;
+  z := start;
+  while 0 < x do {
+    while 0 < y do {
+      while 0 < z do { z := z - 1 };
+      z := start;
+      y := y - 1
+    };
+    y := start;
+    x := x - 1
+  }
+  """
+  println(
+    eval(Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, loops))).head)
+  )
+}
+
+@main
+def primes() = {
+  val primes =
+    """
+  // prints out prime numbers from 2 to 100
+
+  end := 100;
+  n := 2;
+  while ( n < end) do {
+    f := 2;
+    tmp := 0;
+    while ((f < n / 2 + 1) && (tmp == 0)) do {
+      if ((n / f) * f == n) then { tmp := 1 } else { skip };
+      f := f + 1
+    };
+    if (tmp == 0) then { write(n); write("\n") } else { skip };
+    n  := n + 1
+  }
+  """
+  println(
+    eval(
+      Statements
+        .parse_all(filter_tokens(lexing_simp(LANGUAGE, primes)))
+        .head
+    )
+  )
+
+}
+
+@main
+def collatz() = {
+  val collatz =
+    """// Collatz series
+  //
+  // needs writing of strings and numbers; comments
+  bnd := 1;
+  while bnd < 101 do {
+    write bnd;
+    write ": ";
+    n := bnd;
+    cnt := 0;
+    while n > 1 do {
+      write n;
+      write ",";
+      if n % 2 == 0 then n := n / 2 else n := 3 * n+1;
+      cnt := cnt + 1
+    };
+    write " => ";
+    write cnt;
+    write "\n";
+    bnd := bnd + 1
+  }
+  """
+  println(
+    eval(
+      Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, collatz))).head
+    )
+  )
 }
