@@ -411,7 +411,7 @@ lazy val BooleanExpression: Parser[Tokens, BooleanExpression] =
       case x ~ _ ~ z => LogicalOperation("||", x, z)
     } ||
     Comparison
-lazy val Comparison =
+lazy val Comparison: Parser[Tokens, BooleanExpression] =
   (ArithmeticExpression ~ p"==" ~ ArithmeticExpression).map[BooleanExpression] {
     case x ~ _ ~ z => BooleanOperation("==", x, z);
   } ||
@@ -435,7 +435,7 @@ lazy val Comparison =
       .map[BooleanExpression] {
         case x ~ _ ~ z => BooleanOperation("<=", x, z);
       } || Boolean
-lazy val Boolean =
+lazy val Boolean: Parser[Tokens, BooleanExpression] =
   (p"true".map[BooleanExpression] { _ => True }) ||
     (p"false".map[BooleanExpression] { _ => False }) ||
     (p"(" ~ BooleanExpression ~ p")").map[BooleanExpression] {
