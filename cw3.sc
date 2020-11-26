@@ -247,12 +247,18 @@ def lex_simp(r: Regexp, s: List[Char]): Val =
 def lexing_simp(r: Regexp, s: String) =
   env(lex_simp(r, s.toList))
 
-// Function to filter out the whitespaces and comments from the list of tokens
-def filter_tokens(tks: Tokens): Tokens = {
-  tks.filter(tk => tk._1 != "whitespace" && tk._1 != "comment")
-}
-
 // CW3
+
+// Function to filter out the whitespaces and comments from the list of tokens and escape literals
+def filter_tokens(tks: Tokens): Tokens = {
+  tks
+    .filter(tk => tk._1 != "whitespace" && tk._1 != "comment")
+    .map(tk =>
+      if (tk._1 == "string")
+        (tk._1, StringContext treatEscapes tk._2 replaceAll ("\"", ""))
+      else tk
+    )
+}
 
 case class ~[+A, +B](x: A, y: B)
 
@@ -347,8 +353,8 @@ case class Read(s: String) extends Statement
 case class WriteVar(s: String) extends Statement
 case class WriteStr(s: String) extends Statement
 
-case class Var(s: String) extends ArithmeticExpression
-case class Num(i: Int) extends ArithmeticExpression
+case class Variable(s: String) extends ArithmeticExpression
+case class Number(i: Int) extends ArithmeticExpression
 case class ArithmeticOperation(
     op: String,
     a1: ArithmeticExpression,
@@ -393,43 +399,54 @@ lazy val Term: Parser[Tokens, ArithmeticExpression] =
 lazy val Factor: Parser[Tokens, ArithmeticExpression] =
   (p"(" ~ ArithmeticExpression ~ p")")
     .map[ArithmeticExpression] { case _ ~ y ~ _ => y } ||
-    IdentifierParser.map(Var) ||
-    NumberParser.map(Num)
+    IdentifierParser.map(Variable) ||
+    NumberParser.map(Number)
 
 // Boolean Expressions
 lazy val BooleanExpression: Parser[Tokens, BooleanExpression] =
+  (Comparison ~ p"&&" ~ BooleanExpression).map[BooleanExpression] {
+    case x ~ _ ~ z => LogicalOperation("&&", x, z)
+  } ||
+    (Comparison ~ p"||" ~ BooleanExpression).map[BooleanExpression] {
+      case x ~ _ ~ z => LogicalOperation("||", x, z)
+    } ||
+    Comparison
+
+lazy val Comparison =
   (ArithmeticExpression ~ p"==" ~ ArithmeticExpression).map[BooleanExpression] {
-    case x ~ _ ~ z => BooleanOperation("==", x, z)
+    case x ~ _ ~ z => BooleanOperation("==", x, z);
   } ||
     (ArithmeticExpression ~ p"!=" ~ ArithmeticExpression)
       .map[BooleanExpression] {
-        case x ~ _ ~ z => BooleanOperation("!=", x, z)
-      } ||
-    (ArithmeticExpression ~ p"<" ~ ArithmeticExpression)
-      .map[BooleanExpression] {
-        case x ~ _ ~ z => BooleanOperation("<", x, z)
+        case x ~ _ ~ z => BooleanOperation("!=", x, z);
       } ||
     (ArithmeticExpression ~ p">" ~ ArithmeticExpression)
       .map[BooleanExpression] {
-        case x ~ _ ~ z => BooleanOperation(">", x, z)
+        case x ~ _ ~ z => BooleanOperation(">", x, z);
       } ||
-    (p"(" ~ BooleanExpression ~ p")" ~ p"&&" ~ BooleanExpression)
+    (ArithmeticExpression ~ p">=" ~ ArithmeticExpression)
       .map[BooleanExpression] {
-        case _ ~ y ~ _ ~ _ ~ v => LogicalOperation("and", y, v)
+        case x ~ _ ~ z => BooleanOperation(">=", x, z);
       } ||
-    (p"(" ~ BooleanExpression ~ p")" ~ p"||" ~ BooleanExpression)
+    (ArithmeticExpression ~ p"<" ~ ArithmeticExpression)
       .map[BooleanExpression] {
-        case _ ~ y ~ _ ~ _ ~ v => LogicalOperation("or", y, v)
+        case x ~ _ ~ z => BooleanOperation("<", x, z);
       } ||
-    (p"true".map[BooleanExpression] { _ => True }) ||
+    (ArithmeticExpression ~ p"<=" ~ ArithmeticExpression)
+      .map[BooleanExpression] {
+        case x ~ _ ~ z => BooleanOperation("<=", x, z);
+      } || Boolean
+
+lazy val Boolean =
+  (p"true".map[BooleanExpression] { _ => True }) ||
     (p"false".map[BooleanExpression] { _ => False }) ||
     (p"(" ~ BooleanExpression ~ p")").map[BooleanExpression] {
-      case _ ~ x ~ _ => x
+      case _ ~ y ~ _ => y
     }
 
 // A single statement
 lazy val Statement: Parser[Tokens, Statement] =
-  ((p"skip".map[Statement] { _ => Skip }) ||
+  (p"skip".map[Statement] { _ => Skip }) ||
     (IdentifierParser ~ p":=" ~ ArithmeticExpression).map[Statement] {
       case x ~ _ ~ z => Assign(x, z)
     } ||
@@ -447,15 +464,11 @@ lazy val Statement: Parser[Tokens, Statement] =
       case _ ~ y => WriteVar(y)
     } ||
     (p"write" ~ StringParser).map[Statement] { case _ ~ y => WriteStr(y) } ||
-    (p"if" ~ p"(" ~ BooleanExpression ~ p")" ~ p"then" ~ Block ~ p"else" ~ Block)
-      .map[Statement] { case _ ~ _ ~ y ~ _ ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
     (p"if" ~ BooleanExpression ~ p"then" ~ Block ~ p"else" ~ Block)
       .map[Statement] { case _ ~ y ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
-    (p"while" ~ p"(" ~ BooleanExpression ~ p")" ~ p"do" ~ Block)
-      .map[Statement] { case _ ~ _ ~ y ~ _ ~ _ ~ w => While(y, w) } ||
     (p"while" ~ BooleanExpression ~ p"do" ~ Block).map[Statement] {
       case _ ~ y ~ _ ~ w => While(y, w)
-    })
+    }
 
 // Statements
 lazy val Statements: Parser[Tokens, Block] =
@@ -488,20 +501,20 @@ def q2test() = {
 type Env = Map[String, Int]
 
 // Function to evaluate arithmetic expressions
-def eval_aexp(a: ArithmeticExpression, env: Env): Int =
+def eval_ArithmeticExpression(a: ArithmeticExpression, env: Env): Int =
   a match {
-    case Num(i) => i
-    case Var(s) => env(s)
+    case Number(i)   => i
+    case Variable(s) => env(s)
     case ArithmeticOperation("+", a1, a2) =>
-      eval_aexp(a1, env) + eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) + eval_ArithmeticExpression(a2, env)
     case ArithmeticOperation("-", a1, a2) =>
-      eval_aexp(a1, env) - eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) - eval_ArithmeticExpression(a2, env)
     case ArithmeticOperation("*", a1, a2) =>
-      eval_aexp(a1, env) * eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) * eval_ArithmeticExpression(a2, env)
     case ArithmeticOperation("/", a1, a2) =>
-      eval_aexp(a1, env) / eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) / eval_ArithmeticExpression(a2, env)
     case ArithmeticOperation("%", a1, a2) =>
-      eval_aexp(a1, env) % eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) % eval_ArithmeticExpression(a2, env)
   }
 
 // Function to evaluate boolean & logical expressions
@@ -510,20 +523,20 @@ def eval_bexp(b: BooleanExpression, env: Env): Boolean =
     case True  => true
     case False => false
     case BooleanOperation("==", a1, a2) =>
-      eval_aexp(a1, env) == eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) == eval_ArithmeticExpression(a2, env)
     case BooleanOperation("!=", a1, a2) =>
-      eval_aexp(a1, env) != eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) != eval_ArithmeticExpression(a2, env)
     case BooleanOperation(">", a1, a2) =>
-      eval_aexp(a1, env) > eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) > eval_ArithmeticExpression(a2, env)
     case BooleanOperation("<", a1, a2) =>
-      eval_aexp(a1, env) < eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) < eval_ArithmeticExpression(a2, env)
     case BooleanOperation(">=", a1, a2) =>
-      eval_aexp(a1, env) >= eval_aexp(a2, env)
+      eval_ArithmeticExpression(a1, env) >= eval_ArithmeticExpression(a2, env)
     case BooleanOperation("<=", a1, a2) =>
-      eval_aexp(a1, env) <= eval_aexp(a2, env)
-    case LogicalOperation("and", b1, b2) =>
+      eval_ArithmeticExpression(a1, env) <= eval_ArithmeticExpression(a2, env)
+    case LogicalOperation("&&", b1, b2) =>
       eval_bexp(b1, env) && eval_bexp(b2, env)
-    case LogicalOperation("or", b1, b2) =>
+    case LogicalOperation("||", b1, b2) =>
       eval_bexp(b1, env) || eval_bexp(b2, env)
   }
 
@@ -531,17 +544,14 @@ def eval_bexp(b: BooleanExpression, env: Env): Boolean =
 def eval_stmt(s: Statement, env: Env): Env =
   s match {
     case Skip         => env
-    case Assign(x, a) => env + (x -> eval_aexp(a, env))
+    case Assign(x, a) => env + (x -> eval_ArithmeticExpression(a, env))
     case If(b, bl1, bl2) =>
       if (eval_bexp(b, env)) eval_bl(bl1, env) else eval_bl(bl2, env)
     case While(b, bl) =>
       if (eval_bexp(b, env)) eval_stmt(While(b, bl), eval_bl(bl, env)) else env
     case Read(s)     => env + (s -> scala.io.StdIn.readInt())
     case WriteVar(s) => { print(env(s)); env }
-    case WriteStr(s) => {
-      print(StringContext treatEscapes s.replaceAll("\"", ""));
-      env // Hack to unesacpe string literals
-    }
+    case WriteStr(s) => { print(s); env }
   }
 
 // Function to evaluate a block
