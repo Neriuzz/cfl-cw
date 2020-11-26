@@ -411,7 +411,6 @@ lazy val BooleanExpression: Parser[Tokens, BooleanExpression] =
       case x ~ _ ~ z => LogicalOperation("||", x, z)
     } ||
     Comparison
-
 lazy val Comparison =
   (ArithmeticExpression ~ p"==" ~ ArithmeticExpression).map[BooleanExpression] {
     case x ~ _ ~ z => BooleanOperation("==", x, z);
@@ -436,7 +435,6 @@ lazy val Comparison =
       .map[BooleanExpression] {
         case x ~ _ ~ z => BooleanOperation("<=", x, z);
       } || Boolean
-
 lazy val Boolean =
   (p"true".map[BooleanExpression] { _ => True }) ||
     (p"false".map[BooleanExpression] { _ => False }) ||
@@ -659,7 +657,7 @@ def collatz() = {
 
       cnt := cnt + 1
     };
-    
+
     write " => ";
     write cnt;
     write "\n";
