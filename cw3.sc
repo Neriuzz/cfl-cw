@@ -480,7 +480,7 @@ lazy val Block: Parser[Tokens, Block] =
   ((p"{" ~ Statements ~ p"}").map {
     case _ ~ y ~ _ => y
   } ||
-    (Statement.map(s => List(s))))
+    (Statement.map[Block](s => List(s))))
 
 @main
 def q2test() = {
@@ -565,7 +565,7 @@ def eval(bl: Block): Env = eval_bl(bl, Map())
 @main
 def fib() = {
   val fib =
-    """write "Fib";
+    """write "Fib\n";
   read n;
   minus1 := 0;
   minus2 := 1;
@@ -575,8 +575,8 @@ def fib() = {
     minus1 := temp;
     n := n - 1
   };
-  write "Result";
-  write minus2"""
+  write "Result\n";
+  write minus2\n"""
   println(
     eval(Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, fib))).head)
   )
@@ -585,7 +585,7 @@ def fib() = {
 @main
 def loops() = {
   val loops =
-    """start := 100;
+    """start := 1000;
   x := start;
   y := start;
   z := start;
@@ -669,4 +669,17 @@ def collatz() = {
       Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, collatz))).head
     )
   )
+}
+
+// Benchmark for the loops program
+def time_needed[T](code: => T) = {
+  val start = System.nanoTime()
+  code
+  val end = System.nanoTime()
+  (end - start) / 1.0e9
+}
+
+@main
+def time_loops() = {
+  println(f"${time_needed(loops())}%.5f seconds")
 }
