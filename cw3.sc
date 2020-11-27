@@ -681,5 +681,5 @@ def time_needed[T](code: => T) = {
 
 @main
 def time_loops() = {
-  println(f"${time_needed(loops())}%.5f seconds")
+  println(f"${time_needed(loops())}%.2f seconds")
 }
