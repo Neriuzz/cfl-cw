@@ -1,4 +1,4 @@
-// Compiler & Formal Languages Coursework 3
+// Compiler & Formal Languages Coursework 4
 // Nerius Ilmonas, King's ID: K1889934, Student ID: 1802769
 
 // Lexer from CW2
@@ -482,204 +482,259 @@ lazy val Block: Parser[Tokens, Block] =
   } ||
     (Statement.map[Block](s => List(s))))
 
-@main
-def q2test() = {
-  println(
-    Statements.parse_all(
-      filter_tokens(
-        lexing_simp(LANGUAGE, "if (a < b) then skip else a := a * b + 1")
-      )
-    )
-  )
+// Coursework 4 Compiler
+
+// Compiler headers needed for the JVM
+val beginning = """
+.class public XXX.XXX
+.super java/lang/Object
+
+.method public static write(I)V 
+    .limit locals 1 
+    .limit stack 2 
+    getstatic java/lang/System/out Ljava/io/PrintStream; 
+    iload 0
+    invokevirtual java/io/PrintStream/println(I)V 
+    return 
+.end method
+
+.method public static writes(Ljava/lang/String;)V
+    .limit stack 2
+    .limit locals 1
+    getstatic java/lang/System/out Ljava/io/PrintStream;
+    aload 0
+    invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+    return
+.end method
+
+.method public static read()I
+    .limit locals 10
+    .limit stack 10
+
+    ldc 0
+    istore 1
+Label1:
+    getstatic java/lang/System/in Ljava/io/InputStream;
+    invokevirtual java/io/InputStream/read()I
+    istore 2
+    iload 2
+    ldc 10
+    isub
+    ifeq Label2
+    iload 2
+    ldc 32
+    isub
+    ifeq Label2
+    iload 2
+    ldc 48
+    isub
+    ldc 10
+    iload 1
+    imul
+    iadd
+    istore 1
+    goto Label1
+Label2:
+    iload 1
+    ireturn
+.end method
+
+.method public static main([Ljava/lang/String;)V
+   .limit locals 200
+   .limit stack 200
+
+; COMPILED CODE STARTS
+
+"""
+
+val ending = """
+; COMPILED CODE ENDS
+   return
+
+.end method
+"""
+
+// For generating labels
+var counter = -1
+
+def generate_label(s: String) = {
+  counter += 1
+  s ++ "_" ++ counter.toString()
 }
 
-// Question 3
+// Convenient string interpolations
+import scala.language.implicitConversions
+import scala.language.reflectiveCalls
 
-// An interpreter for the WHILE language
-type Env = Map[String, Int]
+implicit def string_inters(sc: StringContext) =
+  new {
+    def i(args: Any*): String = "   " ++ sc.s(args: _*) ++ "\n"
+    def l(args: Any*): String = sc.s(args: _*) ++ ":\n"
+  }
 
-// Function to evaluate arithmetic expressions
-def eval_ArithmeticExpression(a: ArithmeticExpression, env: Env): Int =
+// Environment
+type Environment = Map[String, Int]
+
+// Compilation
+
+// Compiling operators
+def compile_operator(op: String) =
+  op match {
+    case "+" => i"iadd"
+    case "-" => i"isub"
+    case "*" => i"imul"
+    case "/" => i"idiv"
+    case "%" => i"irem"
+  }
+
+// Compiling arithmetic expressions
+def compile_arithmetic_expression(
+    a: ArithmeticExpression,
+    env: Environment
+): String =
   a match {
-    case Number(i)   => i
-    case Variable(s) => env(s)
-    case ArithmeticOperation("+", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) + eval_ArithmeticExpression(a2, env)
-    case ArithmeticOperation("-", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) - eval_ArithmeticExpression(a2, env)
-    case ArithmeticOperation("*", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) * eval_ArithmeticExpression(a2, env)
-    case ArithmeticOperation("/", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) / eval_ArithmeticExpression(a2, env)
-    case ArithmeticOperation("%", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) % eval_ArithmeticExpression(a2, env)
+    case Number(i)   => i"ldc $i"
+    case Variable(x) => i"iload ${env(x)} \t\t; $x"
+    case ArithmeticOperation(op, a1, a2) =>
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ compile_operator(op)
   }
 
-// Function to evaluate boolean & logical expressions
-def eval_bexp(b: BooleanExpression, env: Env): Boolean =
+// Compiling boolean expressions
+def compile_boolean_expression(
+    b: BooleanExpression,
+    env: Environment,
+    jmp: String
+): String =
   b match {
-    case True  => true
-    case False => false
+    case True  => ""
+    case False => i"goto $jmp"
     case BooleanOperation("==", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) == eval_ArithmeticExpression(a2, env)
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmpne $jmp"
     case BooleanOperation("!=", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) != eval_ArithmeticExpression(a2, env)
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmpeq $jmp"
     case BooleanOperation(">", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) > eval_ArithmeticExpression(a2, env)
-    case BooleanOperation("<", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) < eval_ArithmeticExpression(a2, env)
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmple $jmp"
     case BooleanOperation(">=", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) >= eval_ArithmeticExpression(a2, env)
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmplt $jmp"
+    case BooleanOperation("<", a1, a2) =>
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmpge $jmp"
     case BooleanOperation("<=", a1, a2) =>
-      eval_ArithmeticExpression(a1, env) <= eval_ArithmeticExpression(a2, env)
+      compile_arithmetic_expression(a1, env) ++ compile_arithmetic_expression(
+        a2,
+        env
+      ) ++ i"if_icmpgt $jmp"
     case LogicalOperation("&&", b1, b2) =>
-      eval_bexp(b1, env) && eval_bexp(b2, env)
-    case LogicalOperation("||", b1, b2) =>
-      eval_bexp(b1, env) || eval_bexp(b2, env)
+      compile_boolean_expression(b1, env, jmp) ++ compile_boolean_expression(
+        b2,
+        env,
+        jmp
+      )
+    case LogicalOperation("||", b1, b2) => {
+      val jmp_true = generate_label("jmp_true")
+      val jmp_false = generate_label("jmp_false")
+      compile_boolean_expression(
+        b1,
+        env,
+        jmp_false
+      ) ++ i"goto $jmp_true" ++ l"$jmp_false" ++ compile_boolean_expression(
+        b2,
+        env,
+        jmp
+      ) ++ l"$jmp_true"
+    }
   }
 
-// Function to evaluate a single statement
-def eval_stmt(s: Statement, env: Env): Env =
+// Compiling statements
+def compile_statement(s: Statement, env: Environment): (String, Environment) =
   s match {
-    case Skip         => env
-    case Assign(x, a) => env + (x -> eval_ArithmeticExpression(a, env))
-    case If(b, bl1, bl2) =>
-      if (eval_bexp(b, env)) eval_bl(bl1, env) else eval_bl(bl2, env)
-    case While(b, bl) =>
-      if (eval_bexp(b, env)) eval_stmt(While(b, bl), eval_bl(bl, env)) else env
-    case Read(s)     => env + (s -> scala.io.StdIn.readInt())
-    case WriteVar(s) => { print(env(s)); env }
-    case WriteStr(s) => { print(s); env }
+    case Skip => ("", env)
+    case Assign(x, a) => {
+      val index = env.getOrElse(x, env.keys.size)
+      (
+        compile_arithmetic_expression(a, env) ++ i"istore $index \t\t; $x",
+        env + (x -> index)
+      )
+    }
+    case If(cond, bl1, bl2) => {
+      val if_else = generate_label("if_else")
+      val if_end = generate_label("if_end")
+      val (instructions1, env1) = compile_block(bl1, env)
+      val (instructions2, env2) = compile_block(bl2, env1)
+      (
+        compile_boolean_expression(
+          cond,
+          env,
+          if_else
+        ) ++ instructions1 ++ i"goto $if_end" ++ l"$if_else" ++ instructions2 ++ l"$if_end",
+        env2
+      )
+    }
+    case While(cond, bl) => {
+      val loop_begin = generate_label("loop_begin")
+      val loop_end = generate_label("loop_end")
+      val (instructions1, env1) = compile_block(bl, env)
+      (
+        l"$loop_begin" ++ compile_boolean_expression(
+          cond,
+          env,
+          loop_end
+        ) ++ instructions1 ++ i"goto $loop_begin" ++ l"$loop_end",
+        env1
+      )
+    }
+    case WriteVar(s) =>
+      (i"iload ${env(s)} \t\t; $s" ++ i"invokestatic XXX/XXX/write(I)V", env)
+    case WriteStr(s) =>
+      (i"ldc $s" ++ i"invokestatic XXX/XXX/writes(Ljava/lang/String;)V", env)
+    case Read(s) => {
+      val index = env.getOrElse(s, env.keys.size)
+      (
+        i"invokestatic XXX/XXX/read()I" ++ i"istore ${index} \t\t; $s",
+        env + (s -> index)
+      )
+    }
   }
 
-// Function to evaluate a block
-def eval_bl(bl: Block, env: Env): Env =
+// Compiling blocks
+def compile_block(bl: Block, env: Environment): (String, Environment) =
   bl match {
-    case Nil     => env
-    case s :: bl => eval_bl(bl, eval_stmt(s, env))
+    case Nil => ("", env)
+    case s :: bl => {
+      val (instructions1, env1) = compile_statement(s, env)
+      val (instructions2, env2) = compile_block(bl, env1)
+      (instructions1 ++ instructions2, env2)
+    }
   }
 
-// General eval function
-def eval(bl: Block): Env = eval_bl(bl, Map())
-
-@main
-def fib() = {
-  val fib =
-    """write "Fib\n";
-  read n;
-  minus1 := 0;
-  minus2 := 1;
-  while n > 0 do {
-    temp := minus2;
-    minus2 := minus1 + minus2;
-    minus1 := temp;
-    n := n - 1
-  };
-  write "Result\n";
-  write minus2"""
-  println(
-    eval(Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, fib))).head)
-  )
+// Main compilation function
+def compile(bl: Block, class_name: String): String = {
+  val instructions = compile_block(bl, Map.empty)._1
+  (beginning ++ instructions ++ ending).replaceAll("XXX", class_name)
 }
 
-@main
-def loops() = {
-  val loops =
-    """start := 1000;
-  x := start;
-  y := start;
-  z := start;
-  while 0 < x do {
-    while 0 < y do {
-      while 0 < z do { z := z - 1 };
-      z := start;
-      y := y - 1
-    };
-    y := start;
-    x := x - 1
-  }
-  """
-  println(
-    eval(Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, loops))).head)
-  )
-}
-
-@main
-def primes() = {
-  val primes =
-    """
-  // prints out prime numbers from 2 to 100
-
-  end := 100;
-  n := 2;
-  while ( n < end) do {
-    f := 2;
-    tmp := 0;
-    while ((f < n / 2 + 1) && (tmp == 0)) do {
-      if ((n / f) * f == n) then { tmp := 1 } else { skip };
-      f := f + 1
-    };
-    if (tmp == 0) then { write(n); write("\n") } else { skip };
-    n  := n + 1
-  }
-  """
-  println(
-    eval(
-      Statements
-        .parse_all(filter_tokens(lexing_simp(LANGUAGE, primes)))
-        .head
-    )
-  )
-
-}
-
-@main
-def collatz() = {
-  val collatz =
-    """// Collatz series
-  //
-  // needs writing of strings and numbers; comments
-
-  bnd := 1;
-  while bnd < 101 do {
-    write bnd;
-    write ": ";
-    n := bnd;
-    cnt := 0;
-
-    while n > 1 do {
-      write n;
-      write ",";
-
-      if n % 2 == 0 
-      then n := n / 2 
-      else n := 3 * n+1;
-
-      cnt := cnt + 1
-    };
-
-    write " => ";
-    write cnt;
-    write "\n";
-    bnd := bnd + 1
-  }
-  """
-  println(
-    eval(
-      Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, collatz))).head
-    )
-  )
-}
-
-// Benchmark for the loops program
-def time_needed[T](code: => T) = {
-  val start = System.nanoTime()
-  code
-  val end = System.nanoTime()
-  (end - start) / 1.0e9
-}
-
-@main
-def time_loops() = {
-  println(f"${time_needed(loops())}%.2f seconds")
+// Function to compile and run .j files
+def run(bl: Block, class_name: String) = {
+  val code = compile(bl, class_name)
+  os.write.over(os.pwd / s"$class_name.j", code)
+  os.proc("java", "-jar", "jasmin.jar", s"$class_name.j").call()
+  os.proc("jasa", s"$class_name/$class_name")
+    .call(stdout = os.Inherit, stdin = os.Inherit)
 }
