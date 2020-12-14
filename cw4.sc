@@ -121,7 +121,7 @@ def env(v: Val): Tokens =
 
 // Regular expressions for syntatic entities of the WHILE language
 val KEYWORD: Regexp =
-  "while" | "if" | "then" | "else" | "do" | "for" | "to" | "true" | "false" | "read" | "write" | "skip"
+  "while" | "if" | "then" | "else" | "do" | "for" | "upto" | "true" | "false" | "read" | "write" | "skip"
 val OPERATOR: Regexp =
   "+" | "-" | "*" | "%" | "/" | "==" | "!=" | ">" | "<" | "<=" | ">=" | ":=" | "&&" | "||"
 val LETTER: Regexp =
@@ -348,6 +348,11 @@ type Block = List[Statement]
 case object Skip extends Statement
 case class If(cond: BooleanExpression, bl1: Block, bl2: Block) extends Statement
 case class While(cond: BooleanExpression, bl: Block) extends Statement
+case class For(
+    assign: Assign,
+    upto: ArithmeticExpression,
+    bl: Block
+) extends Statement
 case class Assign(s: String, a: ArithmeticExpression) extends Statement
 case class Read(s: String) extends Statement
 case class WriteVar(s: String) extends Statement
@@ -466,7 +471,11 @@ lazy val Statement: Parser[Tokens, Statement] =
       .map[Statement] { case _ ~ y ~ _ ~ u ~ _ ~ w => If(y, u, w) } ||
     (p"while" ~ BooleanExpression ~ p"do" ~ Block).map[Statement] {
       case _ ~ y ~ _ ~ w => While(y, w)
-    }
+    } ||
+    (p"for" ~ IdentifierParser ~ p":=" ~ ArithmeticExpression ~ p"upto" ~ ArithmeticExpression ~ p"do" ~ Block)
+      .map[Statement] {
+        case _ ~ y ~ _ ~ w ~ _ ~ v ~ _ ~ r => For(Assign(y, w), v, r)
+      }
 
 // Statements
 lazy val Statements: Parser[Tokens, Block] =
@@ -494,7 +503,7 @@ val beginning = """
     .limit stack 2 
     getstatic java/lang/System/out Ljava/io/PrintStream; 
     iload 0
-    invokevirtual java/io/PrintStream/println(I)V 
+    invokevirtual java/io/PrintStream/print(I)V 
     return 
 .end method
 
@@ -503,7 +512,7 @@ val beginning = """
     .limit locals 1
     getstatic java/lang/System/out Ljava/io/PrintStream;
     aload 0
-    invokevirtual java/io/PrintStream/println(Ljava/lang/String;)V
+    invokevirtual java/io/PrintStream/print(Ljava/lang/String;)V
     return
 .end method
 
@@ -690,20 +699,38 @@ def compile_statement(s: Statement, env: Environment): (String, Environment) =
     case While(cond, bl) => {
       val loop_begin = generate_label("loop_begin")
       val loop_end = generate_label("loop_end")
-      val (instructions1, env1) = compile_block(bl, env)
+      val (instructions, env1) = compile_block(bl, env)
       (
         l"$loop_begin" ++ compile_boolean_expression(
           cond,
           env,
           loop_end
-        ) ++ instructions1 ++ i"goto $loop_begin" ++ l"$loop_end",
+        ) ++ instructions ++ i"goto $loop_begin" ++ l"$loop_end",
         env1
+      )
+    }
+    case For(Assign(x, a), upto, bl) => {
+      val for_begin = generate_label("for_begin")
+      val for_end = generate_label("for_end")
+
+      val (assignment, env1) = compile_statement(Assign(x, a), env)
+      val to = compile_arithmetic_expression(upto, env1)
+      val (instructions, env2) = compile_block(bl, env1)
+
+      (
+        assignment ++ l"$for_begin" ++ i"iload ${env2(x)}" ++ to ++ i"if_icmpgt $for_end" ++ instructions ++ i"iload ${env2(
+          x
+        )}" ++ i"ldc 1" ++ i"iadd" ++ i"istore ${env2(x)}" ++ i"goto $for_begin" ++ l"$for_end",
+        env2
       )
     }
     case WriteVar(s) =>
       (i"iload ${env(s)} \t\t; $s" ++ i"invokestatic XXX/XXX/write(I)V", env)
     case WriteStr(s) =>
-      (i"ldc $s" ++ i"invokestatic XXX/XXX/writes(Ljava/lang/String;)V", env)
+      (
+        i"""ldc "$s"""" ++ i"invokestatic XXX/XXX/writes(Ljava/lang/String;)V",
+        env
+      )
     case Read(s) => {
       val index = env.getOrElse(s, env.keys.size)
       (
@@ -735,6 +762,47 @@ def run(bl: Block, class_name: String) = {
   val code = compile(bl, class_name)
   os.write.over(os.pwd / s"$class_name.j", code)
   os.proc("java", "-jar", "jasmin.jar", s"$class_name.j").call()
-  os.proc("jasa", s"$class_name/$class_name")
+  os.proc("java", s"$class_name/$class_name")
     .call(stdout = os.Inherit, stdin = os.Inherit)
+}
+
+@main
+def fib() = {
+  val fib =
+    """write "Fib\n";
+  read n;
+  minus1 := 0;
+  minus2 := 1;
+  while n > 0 do {
+    temp := minus2;
+    minus2 := minus1 + minus2;
+    minus1 := temp;
+    n := n - 1
+  };
+  write "Result\n";
+  write minus2;
+  write "\n""""
+  run(
+    Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, fib))).head,
+    "fib"
+  )
+}
+
+@main
+def factorial() = {
+  val factorial = """
+  write "Enter n:\n";
+  read n;
+  total := 1;
+  for i := 1 upto n do {
+    total := total * i
+  };
+  write "Result:\n";
+  write total;
+  write "\n"
+  """
+  run(
+    Statements.parse_all(filter_tokens(lexing_simp(LANGUAGE, factorial))).head,
+    "factorial"
+  )
 }

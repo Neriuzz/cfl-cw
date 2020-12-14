@@ -27,3 +27,7 @@
 .metals
 .ammonite
 .scalafmt.conf
+
+*.jar
+*.j
+/*
