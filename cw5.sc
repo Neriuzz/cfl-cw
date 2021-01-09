@@ -328,13 +328,10 @@ case object IdentifierParser extends Parser[Tokens, String] {
   }
 }
 
-// Hacking the NumberParser a bit so it works with both integers and floats
-import scala.util.Try
-
-case object NumberParser extends Parser[Tokens, AnyVal] {
+case object NumberParser extends Parser[Tokens, String] {
   def parse(in: Tokens) = {
     if (in.nonEmpty && in.head._1 == "number")
-      Set((Try(in.head._2.toInt).getOrElse(in.head._2.toFloat), in.tail))
+      Set((in.head._2, in.tail))
     else Set()
   }
 }
@@ -385,7 +382,27 @@ case class Sequence(e1: Expression, e2: Expression) extends Expression
 case class BooleanOperation(op: String, a1: Expression, a2: Expression)
     extends BooleanExpression
 
+import scala.util.Try
+
 // Parsing
+lazy val lol: Parser[Tokens, Expression] =
+  (NumberParser.map[Expression] {
+    case x =>
+      Try(ConstInteger(x.toInt))
+        .getOrElse(ConstFloat(x.toFloat))
+  } ~ p"+" ~ NumberParser.map[Expression] {
+    case x =>
+      Try(ConstInteger(x.toInt))
+        .getOrElse(ConstFloat(x.toFloat))
+  }).map[Expression] {
+    case x ~ _ ~ z => ArithmeticOperation("+", x, z)
+  }
+
+@main
+def xd() = {
+  val xd = "1.25 + 2.32"
+  println(lol.parse_all(filter_tokens(lexing_simp(LANGUAGE, xd))))
+}
 
 @main
 def mandelbrot() = {
