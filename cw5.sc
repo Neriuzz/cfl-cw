@@ -328,9 +328,13 @@ case object IdentifierParser extends Parser[Tokens, String] {
   }
 }
 
-case object NumberParser extends Parser[Tokens, Int] {
+// Hacking the NumberParser a bit so it works with both integers and floats
+import scala.util.Try
+
+case object NumberParser extends Parser[Tokens, AnyVal] {
   def parse(in: Tokens) = {
-    if (in.nonEmpty && in.head._1 == "number") Set((in.head._2.toInt, in.tail))
+    if (in.nonEmpty && in.head._1 == "number")
+      Set((Try(in.head._2.toInt).getOrElse(in.head._2.toFloat), in.tail))
     else Set()
   }
 }
@@ -346,6 +350,8 @@ implicit def parser_interpolation(sc: StringContext) =
   new {
     def p(args: Any*) = TokenParser(sc.s(args: _*))
   }
+
+// CW 5
 
 // AST For FUN language
 abstract class Expression
@@ -378,6 +384,8 @@ case class Sequence(e1: Expression, e2: Expression) extends Expression
 // Boolean Expressions
 case class BooleanOperation(op: String, a1: Expression, a2: Expression)
     extends BooleanExpression
+
+// Parsing
 
 @main
 def mandelbrot() = {
