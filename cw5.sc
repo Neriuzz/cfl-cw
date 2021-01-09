@@ -386,21 +386,18 @@ import scala.util.Try
 
 // Parsing
 lazy val lol: Parser[Tokens, Expression] =
-  (NumberParser.map[Expression] {
-    case x =>
-      Try(ConstInteger(x.toInt))
-        .getOrElse(ConstFloat(x.toFloat))
-  } ~ p"+" ~ NumberParser.map[Expression] {
-    case x =>
-      Try(ConstInteger(x.toInt))
-        .getOrElse(ConstFloat(x.toFloat))
-  }).map[Expression] {
+  (factor ~ p"+" ~ factor).map[Expression] {
     case x ~ _ ~ z => ArithmeticOperation("+", x, z)
+  }
+
+lazy val factor: Parser[Tokens, Expression] =
+  NumberParser.map[Expression] { x =>
+    Try(ConstInteger(x.toInt)).getOrElse(ConstFloat(x.toFloat))
   }
 
 @main
 def xd() = {
-  val xd = "1.25 + 2.32"
+  val xd = "-1.25 + 2"
   println(lol.parse_all(filter_tokens(lexing_simp(LANGUAGE, xd))))
 }
 
