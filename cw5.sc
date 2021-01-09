@@ -128,7 +128,7 @@ val KEYWORD: Regexp =
   "def" | "val" | "if" | "then" | "else"
 val OPERATOR: Regexp =
   "+" | "-" | "*" | "/" | "%" | "==" | "!=" | ">" | "<" | "<=" | ">=" | "=" | ":" | ","
-val TYPE: Regexp = "Int" | "Float" | "Void"
+val TYPE: Regexp = "Int" | "Double" | "Void"
 val LETTER: Regexp =
   RANGE("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".toSet)
 val SYMBOL: Regexp = LETTER | RANGE("._><=;,:\\".toSet)
@@ -378,3 +378,45 @@ case class Sequence(e1: Expression, e2: Expression) extends Expression
 // Boolean Expressions
 case class BooleanOperation(op: String, a1: Expression, a2: Expression)
     extends BooleanExpression
+
+@main
+def mandelbrot() = {
+  val mandelbrot = """
+    // Mandelbrot program
+
+    val Ymin: Double = -1.3;
+    val Ymax: Double = 1.3;
+    val YStep: Double = 0.05;   //0.025;
+
+    val Xmin: Double = -2.1;
+    val Xmax: Double = 1.1;
+    val Xstep: Double = 0.02;   //0.01;
+
+    val Maxiters: Int = 1000;
+
+    def m_iter(m: Int, x: Double, y: Double,
+                        zr: Double, zi: Double) : Void = {
+        if Maxiters <= m
+        then print_star()
+        else {
+            if 4.0 <= zi*zi+zr*zr then print_space()
+            else m_iter(m + 1, x, y, x+zr*zr-zi*zi, 2.0*zr*zr+y)
+        }
+    };
+
+    def x_iter(x: Double, y: Double) : Void = {
+        if x <= Xmax
+        then { m_iter(0, x, y, 0.0, 0.0) ; x_iter(x + Xstep, y) }
+        else skip()
+    };
+
+    def y_iter(y: Double) : Void = {
+        if y <= Ymax
+        then { x_iter(Xmin, y) ; new_line() ; y_iter(y + Ystep) }
+        else skip()
+    };
+
+    y_iter(Ymin)
+    """
+  println(filter_tokens(lexing_simp(LANGUAGE, mandelbrot)).mkString("\n"))
+}
