@@ -382,18 +382,19 @@ case class Sequence(e1: Expression, e2: Expression) extends Expression
 case class BooleanOperation(op: String, a1: Expression, a2: Expression)
     extends BooleanExpression
 
+// For casting strings to ConstInteger or ConstFloat
 import scala.util.Try
+def cast(s: String) =
+  Try(ConstInteger(s.toInt)).getOrElse(ConstFloat(s.toFloat))
 
 // Parsing
 lazy val lol: Parser[Tokens, Expression] =
-  (factor ~ p"+" ~ factor).map[Expression] {
+  (waltar ~ p"+" ~ waltar).map[Expression] {
     case x ~ _ ~ z => ArithmeticOperation("+", x, z)
   }
 
-lazy val factor: Parser[Tokens, Expression] =
-  NumberParser.map[Expression] { x =>
-    Try(ConstInteger(x.toInt)).getOrElse(ConstFloat(x.toFloat))
-  }
+lazy val waltar: Parser[Tokens, Expression] =
+  NumberParser.map(cast)
 
 @main
 def xd() = {
