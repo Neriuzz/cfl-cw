@@ -338,6 +338,13 @@ case object NumberParser extends Parser[Tokens, String] {
   }
 }
 
+case object TypeParser extends Parser[Tokens, String] {
+  def parse(in: Tokens) = {
+    if (in.nonEmpty && in.head._1 == "type") Set((in.head._2, in.tail))
+    else Set()
+  }
+}
+
 // Used to parse args
 def ListParser[I, T, S](p: => Parser[I, T], q: => Parser[I, S])(implicit
     ev: I => Seq[_]
@@ -346,13 +353,6 @@ def ListParser[I, T, S](p: => Parser[I, T], q: => Parser[I, S])(implicit
     case x ~ _ ~ z => x :: z: List[T]
   } ||
   (p ==> ((s) => List(s)))
-}
-
-case object TypeParser extends Parser[Tokens, String] {
-  def parse(in: Tokens) = {
-    if (in.nonEmpty && in.head._1 == "type") Set((in.head._2, in.tail))
-    else Set()
-  }
 }
 
 implicit def parser_interpolation(sc: StringContext) =
