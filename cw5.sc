@@ -300,10 +300,12 @@ class AltParser[I: IsSeq, T](p: => Parser[I, T], q: => Parser[I, T])
   def parse(in: I) = p.parse(in) ++ q.parse(in)
 }
 
-// Map Parser
-class MapParser[I: IsSeq, T, S](p: => Parser[I, T], f: T => S)
-    extends Parser[I, S] {
-  def parse(in: I) = for ((hd, tl) <- p.parse(in)) yield (f(hd), tl)
+// Fun Parser
+class FunParser[I, T, S](p: => Parser[I, T], f: T => S)(implicit
+    ev: I => Seq[_]
+) extends Parser[I, S] {
+  def parse(sb: I) =
+    for ((head, tail) <- p.parse(sb)) yield (f(head), tail)
 }
 
 // More convenient syntax for parser combinators
@@ -311,7 +313,7 @@ implicit def ParserOps[I: IsSeq, T](p: Parser[I, T]) =
   new {
     def ||(q: => Parser[I, T]) = new AltParser[I, T](p, q)
     def ~[S](q: => Parser[I, S]) = new SeqParser[I, T, S](p, q)
-    def map[S](f: => T => S) = new MapParser[I, T, S](p, f)
+    def ==>[S](f: => T => S) = new FunParser[I, T, S](p, f)
   }
 
 // Token Parsers
@@ -336,9 +338,19 @@ case object NumberParser extends Parser[Tokens, String] {
   }
 }
 
-case object StringParser extends Parser[Tokens, String] {
+// Used to parse args
+def ListParser[I, T, S](p: => Parser[I, T], q: => Parser[I, S])(implicit
+    ev: I => Seq[_]
+): Parser[I, List[T]] = {
+  (p ~ q ~ ListParser(p, q)) ==> {
+    case x ~ _ ~ z => x :: z: List[T]
+  } ||
+  (p ==> ((s) => List(s)))
+}
+
+case object TypeParser extends Parser[Tokens, String] {
   def parse(in: Tokens) = {
-    if (in.nonEmpty && in.head._1 == "string") Set((in.head._2, in.tail))
+    if (in.nonEmpty && in.head._1 == "type") Set((in.head._2, in.tail))
     else Set()
   }
 }
@@ -356,9 +368,12 @@ abstract class BooleanExpression
 abstract class Decleration
 
 // Declerations
+type Argument = (String, String)
+type Arguments = List[Argument]
+
 case class Def(
     name: String,
-    args: List[(String, String)],
+    args: Arguments,
     typeof: String,
     body: Expression
 ) extends Decleration
@@ -388,19 +403,94 @@ def cast(s: String) =
   Try(ConstInteger(s.toInt)).getOrElse(ConstFloat(s.toFloat))
 
 // Parsing
-lazy val lol: Parser[Tokens, Expression] =
-  (waltar ~ p"+" ~ waltar).map[Expression] {
-    case x ~ _ ~ z => ArithmeticOperation("+", x, z)
-  }
 
-lazy val waltar: Parser[Tokens, Expression] =
-  NumberParser.map(cast)
+// Args (name: type)
+lazy val Arg: Parser[Tokens, Argument] =
+  (IdentifierParser ~ p":" ~ TypeParser) ==> { case x ~ _ ~ y => (x, y) }
 
-@main
-def xd() = {
-  val xd = "-1.25 + 2"
-  println(lol.parse_all(filter_tokens(lexing_simp(LANGUAGE, xd))))
-}
+// Expressions
+lazy val Exp: Parser[Tokens, Expression] =
+  (p"if" ~ BExp ~ p"then" ~ Exp ~ p"else" ~ Exp) ==> {
+    case _ ~ x ~ _ ~ y ~ _ ~ z => If(x, y, z): Expression
+  } ||
+    (M ~ p";" ~ Exp) ==> { case x ~ _ ~ y => Sequence(x, y): Expression } || M
+lazy val M: Parser[Tokens, Expression] =
+  (IdentifierParser ~ p"(" ~ ListParser(Exp, p",") ~ p")") ==> {
+    case x ~ _ ~ y ~ _ => Call(x, y): Expression
+  } ||
+    (IdentifierParser ~ p"(" ~ p")") ==> {
+      case x ~ _ ~ _ => Call(x, List()): Expression
+    } ||
+    AExp
+lazy val AExp: Parser[Tokens, Expression] =
+  (Term ~ p"+" ~ Exp) ==> {
+    case x ~ _ ~ y => ArithmeticOperation("+", x, y): Expression
+  } ||
+    (Term ~ p"-" ~ Exp) ==> {
+      case x ~ _ ~ y => ArithmeticOperation("-", x, y): Expression
+    } ||
+    Term
+lazy val Term: Parser[Tokens, Expression] =
+  (Factor ~ p"*" ~ Term) ==> {
+    case x ~ _ ~ y => ArithmeticOperation("*", x, y): Expression
+  } ||
+    (Factor ~ p"/" ~ Term) ==> {
+      case x ~ _ ~ y => ArithmeticOperation("/", x, y): Expression
+    } ||
+    (Factor ~ p"%" ~ Term) ==> {
+      case x ~ _ ~ y => ArithmeticOperation("%", x, y): Expression
+    } ||
+    Factor
+lazy val Factor: Parser[Tokens, Expression] =
+  (p"{" ~ Exp ~ p"}") ==> { case _ ~ x ~ _ => x: Expression } ||
+    IdentifierParser ==> Variable ||
+    NumberParser ==> cast
+
+// Boolean Expressions
+lazy val BExp: Parser[Tokens, BooleanExpression] =
+  (Exp ~ p"==" ~ Exp) ==> {
+    case x ~ _ ~ y => BooleanOperation("==", x, y): BooleanExpression
+  } ||
+    (Exp ~ p"!=" ~ Exp) ==> {
+      case x ~ _ ~ y => BooleanOperation("!=", x, y): BooleanExpression
+    } ||
+    (Exp ~ p"<" ~ Exp) ==> {
+      case x ~ _ ~ y => BooleanOperation("<", x, y): BooleanExpression
+    } ||
+    (Exp ~ p"<=" ~ Exp) ==> {
+      case x ~ _ ~ y => BooleanOperation("<=", x, y): BooleanExpression
+    } ||
+    (Exp ~ p">" ~ Exp) ==> {
+      case x ~ _ ~ y => BooleanOperation("<", y, x): BooleanExpression
+    } ||
+    (Exp ~ p">=" ~ Exp) ==> {
+      case x ~ _ ~ y => BooleanOperation("<=", y, x): BooleanExpression
+    }
+
+// Definitions
+lazy val Defn: Parser[Tokens, Decleration] =
+  (p"def" ~ IdentifierParser ~ p"(" ~ ListParser(
+    Arg,
+    p","
+  ) ~ p")" ~ p":" ~ TypeParser ~ p"=" ~ Exp) ==> {
+    case _ ~ x ~ _ ~ y ~ _ ~ _ ~ z ~ _ ~ w => Def(x, y, z, w): Decleration
+  } ||
+    (p"val" ~ IdentifierParser ~ p":" ~ p"Int" ~ p"=" ~ NumberParser) ==> {
+      case _ ~ x ~ _ ~ _ ~ _ ~ y =>
+        ConstIntegerDecleration(x, y.toInt): Decleration
+    } ||
+    (p"val" ~ IdentifierParser ~ p":" ~ p"Double" ~ p"=" ~ NumberParser) ==> {
+      case _ ~ x ~ _ ~ _ ~ _ ~ y =>
+        ConstFloatDecleration(x, y.toFloat): Decleration
+    }
+
+// Program
+type Declerations = List[Decleration]
+lazy val Prog: Parser[Tokens, Declerations] =
+  (Defn ~ p";" ~ Prog) ==> {
+    case x ~ _ ~ y => x :: y: Declerations
+  } ||
+    (Exp ==> ((s) => List(Main(s)): Declerations))
 
 @main
 def mandelbrot() = {
@@ -441,5 +531,8 @@ def mandelbrot() = {
 
     y_iter(Ymin)
     """
-  println(filter_tokens(lexing_simp(LANGUAGE, mandelbrot)).mkString("\n"))
+  println(
+    Prog
+      .parse_all(filter_tokens(lexing_simp(LANGUAGE, mandelbrot)))
+  )
 }
